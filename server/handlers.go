@@ -9,7 +9,7 @@ import (
 
 type ServerState struct {
 	clients []Client
-	updates []Data
+	data    []Data
 }
 
 func (state *ServerState) Registration(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +32,7 @@ func (state *ServerState) SendData(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 	log.Println("Data received: ", data)
-	state.updates = append(state.updates, data)
+	state.data = append(state.data, data)
 }
 
 func (state *ServerState) Clients(w http.ResponseWriter, r *http.Request) {
@@ -41,4 +41,14 @@ func (state *ServerState) Clients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (state *ServerState) Updates(w http.ResponseWriter, r *http.Request) {
+	updatesForUser := []Data{}
+	user := r.Header["User"]
+	for _, data := range state.data {
+		if data.Target == user[0] {
+			updatesForUser = append(updatesForUser, data)
+		}
+	}
+
+	json.NewEncoder(w).Encode(updatesForUser)
+	w.Header().Set("Content-Type", "application/json")
 }

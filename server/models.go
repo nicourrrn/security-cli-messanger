@@ -7,10 +7,6 @@ type Client struct {
 
 type Data struct {
 	Target        string `json:"target"`
-	EncryptedData string `json:"encryptedData"`
-}
-
-type Update struct {
 	Source        string `json:"source"`
 	EncryptedData string `json:"encryptedData"`
 }
