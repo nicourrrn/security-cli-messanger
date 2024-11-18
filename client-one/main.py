@@ -87,8 +87,9 @@ class Client:
             print(json.dumps(clients, indent=4))
 
     async def get_updates(self):
+        headers = {"User": self.name}  # Add the user's name to the headers
         while True:
-            async with self.session.get(f"{self.base_url}/updates") as response:
+            async with self.session.get(f"{self.base_url}/updates", headers=headers) as response:
                 updates = await response.json()
                 for update in updates:
                     try:
@@ -98,6 +99,7 @@ class Client:
                     except Exception as e:
                         print(f"Failed to decrypt update: {e}")
             await asyncio.sleep(0.5)
+
 
     async def close(self):
         await self.session.close()
