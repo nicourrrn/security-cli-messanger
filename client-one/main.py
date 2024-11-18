@@ -1,9 +1,11 @@
 import asyncio
-import aiohttp
 import json
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric.padding import OAEP, MGF1
+
+import aiohttp
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.padding import MGF1, OAEP
+
 
 # RSA utilities
 def generate_rsa_keys():
@@ -14,19 +16,26 @@ def generate_rsa_keys():
     public_key = private_key.public_key()
     return private_key, public_key
 
+
 def encrypt_message(public_key, message):
     encrypted = public_key.encrypt(
         message.encode(),
-        OAEP(mgf=MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+        OAEP(
+            mgf=MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None
+        ),
     )
     return encrypted
+
 
 def decrypt_message(private_key, encrypted_message):
     decrypted = private_key.decrypt(
         encrypted_message,
-        OAEP(mgf=MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+        OAEP(
+            mgf=MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None
+        ),
     )
     return decrypted.decode()
+
 
 # Client class
 class P2PClient:
@@ -42,31 +51,36 @@ class P2PClient:
             "name": self.name,
             "publicKey": self.public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo
-            ).decode()
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            ).decode(),
         }
-        async with self.session.post(f"{self.base_url}/registration", json=payload) as response:
+        async with self.session.post(
+            f"{self.base_url}/registration", json=payload
+        ) as response:
             print(await response.text())
 
     async def send_data(self, target, message):
         # Fetch the public key of the target from the clients endpoint
         async with self.session.get(f"{self.base_url}/clients") as response:
             clients = await response.json()
-        
-        target_client = next((c for c in clients["clients"] if c["name"] == target), None)
+
+        target_client = next(
+            (c for c in clients["clients"] if c["name"] == target), None
+        )
         if not target_client:
             print(f"Client '{target}' not found!")
             return
-        
+
         # Encrypt message with the target's public key
-        target_public_key = serialization.load_pem_public_key(target_client["publicKey"].encode())
+        target_public_key = serialization.load_pem_public_key(
+            target_client["publicKey"].encode()
+        )
         encrypted_data = encrypt_message(target_public_key, message)
 
-        payload = {
-            "target": target,
-            "encryptedData": encrypted_data.hex()
-        }
-        async with self.session.post(f"{self.base_url}/send_data", json=payload) as response:
+        payload = {"target": target, "encryptedData": encrypted_data.hex()}
+        async with self.session.post(
+            f"{self.base_url}/send_data", json=payload
+        ) as response:
             print(await response.text())
 
     async def get_clients(self):
@@ -91,6 +105,7 @@ class P2PClient:
     async def close(self):
         await self.session.close()
 
+
 # Main function
 async def main():
     # Generate RSA keys for the client
@@ -99,7 +114,7 @@ async def main():
     base_url = "http://localhost:8000"
 
     client = P2PClient(base_url, client_name, private_key, public_key)
-    
+
     try:
         # Register client
         await client.register()
@@ -119,6 +134,7 @@ async def main():
         print("Stopping client...")
     finally:
         await client.close()
+
 
 # Run the main function
 if __name__ == "__main__":
