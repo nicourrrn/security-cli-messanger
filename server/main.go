@@ -14,5 +14,5 @@ func main() {
 	http.HandleFunc("/updates", state.Updates)
 
 	log.Println("Server started")
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":8000", nil)
 }

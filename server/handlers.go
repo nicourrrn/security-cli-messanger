@@ -19,6 +19,14 @@ func (state *ServerState) Registration(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	for i := range state.clients {
+		if state.clients[i].Name == client.Name {
+			log.Println("Client registered: ", client.Name)
+			io.WriteString(w, "Client already registered")
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+	}
 	state.clients = append(state.clients, client)
 	log.Println("Client registered: ", client.Name)
 	io.WriteString(w, "Client registered")
