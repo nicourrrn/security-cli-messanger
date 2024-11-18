@@ -27,6 +27,7 @@ func (state *ServerState) SendData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (state *ServerState) Clients(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(state.clients)
 }
 
 func (state *ServerState) Updates(w http.ResponseWriter, r *http.Request) {
