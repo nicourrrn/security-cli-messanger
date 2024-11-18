@@ -1,6 +1,6 @@
 import asyncio
 import json
-
+import argparse
 import aiohttp
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -38,7 +38,7 @@ def decrypt_message(private_key, encrypted_message):
 
 
 # Client class
-class P2PClient:
+class Client:
     def __init__(self, base_url, name, private_key, public_key):
         self.base_url = base_url
         self.name = name
@@ -60,7 +60,6 @@ class P2PClient:
             print(await response.text())
 
     async def send_data(self, target, message):
-        # Fetch the public key of the target from the clients endpoint
         async with self.session.get(f"{self.base_url}/clients") as response:
             clients = await response.json()
 
@@ -71,7 +70,6 @@ class P2PClient:
             print(f"Client '{target}' not found!")
             return
 
-        # Encrypt message with the target's public key
         target_public_key = serialization.load_pem_public_key(
             target_client["publicKey"].encode()
         )
@@ -94,7 +92,6 @@ class P2PClient:
                 updates = await response.json()
                 for update in updates:
                     try:
-                        # Decrypt incoming message
                         encrypted_data = bytes.fromhex(update["encryptedData"])
                         message = decrypt_message(self.private_key, encrypted_data)
                         print(f"Update from {update['source']}: {message}")
@@ -108,34 +105,35 @@ class P2PClient:
 
 # Main function
 async def main():
+    parser = argparse.ArgumentParser(description="Messenger CLI")
+    parser.add_argument("command", choices=["register", "send", "clients", "updates"], help="Command to execute")
+    parser.add_argument("--target", help="Target client name (required for send command)")
+    parser.add_argument("--message", help="Message to send (required for send command)")
+    parser.add_argument("--name", required=True, help="Your client name")
+    parser.add_argument("--server", default="http://localhost:8000", help="Server base URL")
+    args = parser.parse_args()
+
     # Generate RSA keys for the client
     private_key, public_key = generate_rsa_keys()
-    client_name = "pustostas"
-    base_url = "http://localhost:8000"
-
-    client = P2PClient(base_url, client_name, private_key, public_key)
+    client = Client(args.server, args.name, private_key, public_key)
 
     try:
-        # Register client
-        await client.register()
-
-        # Fetch and print clients
-        # await client.get_clients()
-
-        # Send a message to another client
-        # target_name = "nicourrrn"
-        # message = "Hello, this is a test!"
-        # await client.send_data(target_name, message)
-
-        # Start fetching updates
-        # await client.get_updates()
-
+        if args.command == "register":
+            await client.register()
+        elif args.command == "send":
+            if not args.target or not args.message:
+                print("Error: --target and --message are required for send command")
+                return
+            await client.send_data(args.target, args.message)
+        elif args.command == "clients":
+            await client.get_clients()
+        elif args.command == "updates":
+            await client.get_updates()
     except KeyboardInterrupt:
         print("Stopping client...")
     finally:
         await client.close()
 
 
-# Run the main function
 if __name__ == "__main__":
     asyncio.run(main())
