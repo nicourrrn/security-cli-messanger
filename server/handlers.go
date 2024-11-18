@@ -1,21 +1,33 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
+	"log"
 	"net/http"
 )
 
-// POST registration
-func Registration(w http.ResponseWriter, r *http.Request) {
+type ServerState struct {
+	clients []Client
 }
 
-// POST send_data
-func SendData(w http.ResponseWriter, r *http.Request) {
+func (state *ServerState) Registration(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	var client Client
+	err := decoder.Decode(&client)
+	if err != nil {
+		log.Fatal(err)
+	}
+	state.clients = append(state.clients, client)
+	log.Println("Client registered: ", client.Name)
+	io.WriteString(w, "Client registered")
 }
 
-// GET clients
-func Clients(w http.ResponseWriter, r *http.Request) {
+func (state *ServerState) SendData(w http.ResponseWriter, r *http.Request) {
 }
 
-// GET updates
-func Updates(w http.ResponseWriter, r *http.Request) {
+func (state *ServerState) Clients(w http.ResponseWriter, r *http.Request) {
+}
+
+func (state *ServerState) Updates(w http.ResponseWriter, r *http.Request) {
 }
