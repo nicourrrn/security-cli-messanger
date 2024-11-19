@@ -51,6 +51,12 @@ func (state *ServerState) Clients(w http.ResponseWriter, r *http.Request) {
 func (state *ServerState) Updates(w http.ResponseWriter, r *http.Request) {
 	updatesForUser := []Data{}
 	user := r.Header["User"]
+	if len(user) == 0 {
+		log.Println("User not found")
+		io.WriteString(w, "User not found")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	for _, data := range state.data {
 		if data.Target == user[0] {
 			updatesForUser = append(updatesForUser, data)

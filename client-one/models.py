@@ -1,43 +1,61 @@
 import base64
-import json
 
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric.padding import MGF1, OAEP
-
-
-def generate_rsa_keys():
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-    )
-    public_key = private_key.public_key()
-    return private_key, public_key
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Hash import SHA256
+from Crypto.PublicKey import RSA
 
 
-def save_keys(private_key, public_key, filename="keys.json"):
-    private_key_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    public_key_bytes = public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    keys = {
-        "private_key": base64.b64encode(private_key_bytes).decode(),
-        "public_key": base64.b64encode(public_key_bytes).decode(),
-    }
-    with open(filename, "w") as f:
-        f.write(json.dumps(keys))
+class Client:
+    def __init__(
+        self,
+        name: str,
+        public_key: RSA.RsaKey | str,
+        private_key: RSA.RsaKey | None = None,
+    ):
+        self.name = name
+        if isinstance(public_key, str):
+            public_key = RSA.import_key(public_key)
+        self.public_key: RSA.RsaKey = public_key
+        self.private_key: RSA.RsaKey | None = private_key
+
+    @staticmethod
+    def load(data: dict) -> "Client":
+        return Client(
+            name=data["name"],
+            private_key=RSA.import_key(data["private_key"]),
+            public_key=RSA.import_key(data["public_key"]),
+        )
+
+    @staticmethod
+    def with_name(name: str) -> "Client":
+        private_key = RSA.generate(2048)
+        public_key = private_key.publickey()
+        return Client(name, private_key=private_key, public_key=public_key)
+
+    def dump(self) -> dict:
+        private_key = (
+            self.private_key.export_key().decode() if self.private_key else None
+        )
+        return {
+            "name": self.name,
+            "private_key": private_key,
+            "public_key": self.public_key.export_key().decode(),
+        }
 
 
-def load_keys(filename="keys.json"):
-    with open(filename, "r") as f:
-        keys = json.load(f)
-    private_key_bytes = base64.b64decode(keys["private_key"].encode())
-    public_key_bytes = base64.b64decode(keys["public_key"].encode())
-    private_key = serialization.load_pem_private_key(private_key_bytes, password=None)
-    public_key = serialization.load_pem_public_key(public_key_bytes)
-    return private_key, public_key
+class Data:
+    def __init__(self, source: str, target: str, message: str):
+        self.source = source
+        self.target = target
+        self.message = message
+
+    def encrypt(self, key: RSA.RsaKey) -> str:
+        cipher = PKCS1_OAEP.new(key, hashAlgo=SHA256)
+        return base64.b64encode(cipher.encrypt(self.message.encode())).decode("utf-8")
+
+    @staticmethod
+    def decrypt(source: str, target: str, message: str, key: RSA.RsaKey) -> "Data":
+        cipher = PKCS1_OAEP.new(key, hashAlgo=SHA256)
+
+        message = cipher.decrypt(base64.b64decode(message)).decode("utf-8")
+        return Data(source, target, message)
