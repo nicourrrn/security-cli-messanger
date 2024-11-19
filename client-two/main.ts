@@ -1,169 +1,73 @@
-import {
-  generateKeyPairSync,
-  publicEncrypt,
-  privateDecrypt,
-  constants,
-} from "crypto";
+import { generateKeyPairSync } from "crypto";
+import readline from "readline";
 
-const urlBase = "http://localhost:8000";
+import { MessangesClient } from "./client-messages.ts";
+import { Client } from "./models.ts";
 
-class Client {
-  name: string;
-  publicKey: string;
-  privateKey: string | null;
-
-  constructor(name: string, publicKey: string, privateKey: string) {
-    this.name = name;
-    this.publicKey = publicKey;
-    this.privateKey = privateKey;
-  }
-}
-
-class Data {
-  source: string;
-  target: string;
-  encryptedData: string;
-
-  constructor(source: string, target: string, encryptedData: string) {
-    this.source = source;
-    this.target = target;
-    this.encryptedData = encryptedData;
-  }
-
-  encrypt(publicKey: string) {
-    this.encryptedData = publicEncrypt(
-      {
-        key: publicKey,
-        padding: constants.RSA_PKCS1_OAEP_PADDING,
-        oaepHash: "sha256",
-      },
-      Buffer.from(this.encryptedData),
-    ).toString("base64");
-  }
-
-  decrypt(privateKey: string) {
-    try {
-      this.encryptedData = privateDecrypt(
-        {
-          key: privateKey,
-          padding: constants.RSA_PKCS1_OAEP_PADDING,
-          oaepHash: "sha256",
-        },
-        Buffer.from(this.encryptedData, "base64"),
-      ).toString();
-    } catch (error) {
-      console.log("Error decrypting data");
-    }
-  }
-}
-
-class MessangesClient {
-  me: Client;
-  clients: Client[];
-  updates: Data[];
-  constructor(client: Client) {
-    this.me = client;
-    this.clients = [];
-    this.updates = [];
-  }
-
-  async registrations(): Promise<string> {
-    const response = await fetch(`${urlBase}/registration`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(this.me),
-    });
-    return response.text();
-  }
-
-  async getClients(): Promise<Client[]> {
-    const response = await fetch(`${urlBase}/clients`, {
-      method: "GET",
-    });
-    this.clients = await response.json();
-
-    return this.clients;
-  }
-
-  async sendData(rawData: string, target: Client): Promise<string> {
-    let data = new Data(this.me.name, target.name, rawData);
-    data.encrypt(target.publicKey);
-
-    const response = await fetch(`${urlBase}/send_data`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
-    return response.text();
-  }
-
-  async getUpdates(): Promise<Data[]> {
-    const response = await fetch(`${urlBase}/updates`, {
-      method: "GET",
-      headers: { User: this.me.name },
-    });
-    let data = (await response.json()) as Data[];
-
-    data = data.map((d) => new Data(d.source, d.target, d.encryptedData));
-    data.forEach((d: Data) => d.decrypt(this.me.privateKey || ""));
-
-    this.updates.concat(data);
-
-    return data;
-  }
-}
-
-const { publicKey, privateKey } = generateKeyPairSync("rsa", {
-  modulusLength: 2048,
-  publicKeyEncoding: {
-    type: "spki",
-    format: "pem",
-  },
-  privateKeyEncoding: {
-    type: "pkcs8",
-    format: "pem",
-  },
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
 });
 
-const client = new Client(prompt("Input your username"), publicKey, privateKey);
+// const client = Client.withoutKeys("Vadym");
+// client.saveMe();
+
+const client = Client.fromFile();
 const messangesClient = new MessangesClient(client);
 
-console.log(await messangesClient.registrations());
-setInterval(async () => {
-  let newMessages = await messangesClient.getUpdates();
-  console.write("----------NEW MESSAGES----------\n");
-  for (let m of newMessages) {
-    console.log(`New message from ${m.source}: ${m.encryptedData}`);
-  }
-  console.write("--------------------------------\n");
-}, 100);
+let userInput = "";
+let lineHandler = async (line: string) => {};
 
-while (true) {
-  for (let c in await messangesClient.getClients()) {
-    console.write(`${c}) ${messangesClient.clients[c].name}\n`);
-  }
+console.write("\x1b[2J\x1b[H");
+console.write(await messangesClient.registrations());
 
-  let target = parseInt(prompt("Select a target: "));
-  if (isNaN(target) || target > messangesClient.clients.length) {
-    console.log("Invalid target");
-    continue;
-  }
-  let lastMessage = false;
-  while (!lastMessage) {
-    let message = prompt("Type a message: ");
-    if (message === "exit") {
-      lastMessage = true;
-      continue;
+const writeNewMessages = () => {
+  setInterval(async () => {
+    let newMessages = await messangesClient.getUpdates();
+    console.log("\x1b[H\x1b[3B");
+    console.write("----------NEW MESSAGES----------\n");
+    for (let m of newMessages) {
+      console.log(`New message from ${m.source}: ${m.encryptedData}`);
     }
-    console.log(
-      `Sending ${message} to ${messangesClient.clients[target].name}`,
-    );
-    console.log(
-      await messangesClient.sendData(message, messangesClient.clients[target]),
-    );
+    console.write("--------------------------------\n");
+    console.write(`\x1b[H\x1b[1B\x1b[2K${userInput}${rl.line}`);
+  }, 500);
+};
+
+const chooseTarget = async () => {
+  console.write("\x1b[H\x1b[2K");
+  for (let c in await messangesClient.getClients()) {
+    console.write(`${c}) ${messangesClient.clients[c].name} | `);
   }
-}
+  userInput = `Select a target: ${rl.line}`;
+  lineHandler = async (line) => {
+    let target = parseInt(line);
+    if (isNaN(target) || target > messangesClient.clients.length) {
+      console.write("Invalid target");
+      chooseTarget();
+      return;
+    }
+    sendingMessages(target);
+  };
+};
+
+const sendingMessages = async (target: number) => {
+  console.write("\x1b[H\x1b[2K");
+  userInput = "Type a message: ";
+  lineHandler = async (line) => {
+    if (line === "exit") {
+      chooseTarget();
+      return;
+    }
+    console.write(
+      `\x1b[2KSending ${line} to \x1b[1m${messangesClient.clients[target].name}\x1b[22m`,
+    );
+    await messangesClient.sendData(line, messangesClient.clients[target]);
+  };
+};
+
+rl.on("line", async (line) => {
+  await lineHandler(line);
+});
+chooseTarget();
+writeNewMessages();
